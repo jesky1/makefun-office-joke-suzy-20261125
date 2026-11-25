@@ -1,46 +1,45 @@
-// test.mjs — own tests for the office-joke-laugh-off entry.
-// Run with: node --test test.mjs
-// Validates the competition gate (UTF-8 text, 1-200 chars, not only
-// whitespace, a single line) and determinism (two runs, identical bytes).
-import { test } from "node:test";
-import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+// test.mjs — checks for the office-joke entry writer.
+// Run: node --test test.mjs
+import test from "node:test";
+import { strict as assert } from "node:assert";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import * as fs from "node:fs";
+import { tmpdir as tempRoot } from "node:os";
+import { join as joinPath } from "node:path";
 
-function runOnce() {
-  const dir = mkdtempSync(join(tmpdir(), "office-joke-out-"));
-  const r = spawnSync(process.execPath, ["main.ts"], {
+// Runs main.ts once into a throwaway folder and hands back the bytes
+// it wrote, so each test reads a fresh, real output file.
+function buildEntry() {
+  const folder = fs.mkdtempSync(joinPath(tempRoot(), "joke-check-"));
+  execFileSync(process.execPath, ["main.ts"], {
     cwd: import.meta.dirname,
-    env: { ...process.env, MAKEFUN_OUTPUT_DIR: dir },
+    env: { ...process.env, MAKEFUN_OUTPUT_DIR: folder },
     encoding: "utf8",
   });
-  assert.equal(r.status, 0, `main.ts exited ${r.status}: ${r.stderr}`);
-  const bytes = readFileSync(join(dir, "entry.txt"));
-  rmSync(dir, { recursive: true, force: true });
+  const bytes = fs.readFileSync(joinPath(folder, "entry.txt"));
+  fs.rmSync(folder, { recursive: true, force: true });
   return bytes;
 }
 
-test("entry passes the gate: 1-200 chars, single line, not blank", () => {
-  const bytes = runOnce();
-  const text = bytes.toString("utf8");
-  assert.ok(text.length >= 1 && text.length <= 200, `length ${text.length} out of range`);
-  assert.ok(text.trim().length > 0, "entry is only whitespace");
-  assert.ok(!text.includes("\n"), "entry must be a single line");
-  assert.ok(!text.includes("\r"), "entry must not contain CR");
+function sha(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+test("the output is one joke: 1–200 chars, one line, not blank", () => {
+  const text = buildEntry().toString("utf8");
+  assert.ok(text.length >= 1 && text.length <= 200, `got ${text.length} chars`);
+  assert.equal(text.trim(), text, "no leading or trailing whitespace");
+  assert.ok(!/[\r\n]/.test(text), "must be a single line");
 });
 
-test("entry is deterministic across runs", () => {
-  const a = runOnce();
-  const b = runOnce();
-  assert.deepEqual(a, b, "two runs produced different bytes");
+test("two builds hash identically", () => {
+  assert.equal(sha(buildEntry()), sha(buildEntry()));
 });
 
-test("entry reads as one office joke with a pay-vs-posture twist", () => {
-  const text = runOnce().toString("utf8");
-  assert.match(text, /HR/, "names the office gatekeeper of raises");
-  assert.match(text, /standing desk/, "lands the punchline on the furniture swap");
-  assert.match(text, /same money/, "keeps the sting: pay unchanged");
-  assert.ok(text.length < 200, "kept tight, well under the cap");
+test("the joke is about HR, a standing desk, and unchanged pay", () => {
+  const text = buildEntry().toString("utf8");
+  for (const word of ["HR", "standing desk", "same money"]) {
+    assert.ok(text.includes(word), `missing ${word}`);
+  }
 });

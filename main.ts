@@ -1,45 +1,40 @@
-// main.ts — One-Line Office Joke Laugh-Off (make.fun)
-// Writes one original one-line office joke to /output/entry.txt.
-// Node 22.18+ runs this TypeScript directly (type stripping).
-import { mkdirSync, writeFileSync } from "node:fs";
+// main.ts — One-Line Office Joke Laugh-Off entry writer.
+// Puts one fresh office joke into /output/entry.txt for the judge.
+import { mkdirSync as makeFolder, writeFileSync as putText } from "node:fs";
+import { join as joinPath } from "node:path";
 
-// The entry line, written in this session. The joke turns a raise
-// request into a furniture upgrade: HR answers a pay question with
-// a standing desk, so the punchline lands on the gap between what
-// was asked for and what was given — same money, new posture.
-const ENTRY =
+// The joke, drafted in this session: a raise request answered with
+// furniture. HR swaps pay for posture, and the last clause — same
+// money, standing up — is where the laugh sits.
+const JOKE =
   "I asked HR for a raise and they gave me a standing desk, so now I earn the same money, just standing up.";
 
-// The competition gate, mirrored here so a bad edit fails loudly at
-// build time instead of silently shipping a rejected entry: exactly one
-// line, 1–200 characters, never only whitespace.
-const GATE_MIN = 1;
-const GATE_MAX = 200;
+// Gate from the competition rules: entry.txt holds UTF-8 text of
+// 1–200 characters, a single line, never whitespace alone.
+const FLOOR = 1;
+const CEILING = 200;
+const TARGET = "entry.txt";
 
-function validateEntry(line: string): void {
-  if (line.length < GATE_MIN || line.length > GATE_MAX) {
-    throw new Error(
-      `entry length ${line.length} is outside the ${GATE_MIN}-${GATE_MAX} gate`,
-    );
-  }
-  if (line.trim().length === 0) {
-    throw new Error("entry must not be only whitespace");
-  }
-  if (line.includes("\n") || line.includes("\r")) {
-    throw new Error("entry must be a single line");
-  }
-}
-validateEntry(ENTRY);
-
-// The competition reads exactly one file, entry.txt, from the output
-// directory — the name is fixed, so it lives in one place.
-const ENTRY_FILE = "entry.txt";
-
-function writeEntry(outDir: string, line: string): void {
-  mkdirSync(outDir, { recursive: true });
-  writeFileSync(`${outDir}/${ENTRY_FILE}`, line, "utf8");
+function fail(reason: string): never {
+  throw new Error(`joke rejected: ${reason}`);
 }
 
-const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
-writeEntry(outDir, ENTRY);
-console.log(`Wrote ${ENTRY.length} characters to ${outDir}/${ENTRY_FILE}`);
+// Every rule the gate states, checked up front so a bad line dies
+// here with a plain reason instead of shipping a rejected entry.
+function checkJoke(text: string): void {
+  if (text.length < FLOOR || text.length > CEILING) {
+    fail(`length ${text.length} outside ${FLOOR}–${CEILING}`);
+  }
+  if (text.trim() === "") fail("blank");
+  if (/[\r\n]/.test(text)) fail("must stay one line");
+}
+
+function main(): void {
+  checkJoke(JOKE);
+  const folder = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
+  makeFolder(folder, { recursive: true });
+  putText(joinPath(folder, TARGET), JOKE, "utf8");
+  console.log(`entry.txt ready: ${JOKE.length} characters in ${folder}`);
+}
+
+main();
